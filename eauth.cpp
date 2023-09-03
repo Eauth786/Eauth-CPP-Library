@@ -143,7 +143,7 @@ std::string generateAuthToken(const std::string& message, const std::string& app
     auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
     std::string timestampStr = std::to_string(timestamp);
 
-    // Remove the last 5 digits from the timestamp
+    // Remove the last 2 digits from the timestamp
     timestampStr = timestampStr.substr(0, timestampStr.length() - 2);
 
     // Concatenate the timestamp, message, and app_id
