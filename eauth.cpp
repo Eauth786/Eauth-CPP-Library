@@ -1,8 +1,12 @@
 #include "eauth.h"
-#include <cpr/cpr.h>
+#include <curl/curl.h>
 #include "skCrypter.h"
 #include <openssl/sha.h>
 #include "rapidjson/document.h"
+#include <__msvc_chrono.hpp>
+#include <filesystem>
+#include <iostream>
+#include <fstream>
 
 // Required configuration
 std::string ACCOUNT_KEY; // Your account key goes here;
@@ -65,77 +69,6 @@ std::string sha512(const std::string& input) {
     return ss.str();
 }
 
-// Base64
-char lookupTable[] = { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
-                       'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-                       'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-                       'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
-                       'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-                       'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-                       'w', 'x', 'y', 'z', '0', '1', '2', '3',
-                       '4', '5', '6', '7', '8', '9', '+', '/' };
-
-char base64Decode(char c) {
-    if (c == '=') {
-        return 0;
-    }
-    else {
-        for (int x = 0; x < 64; x++) {
-            if (lookupTable[x] == c) {
-                return (char)x;
-            }
-        }
-        return 0;
-    }
-}
-
-std::string base64Decode(const std::string& data) {
-    int length, length2, length3;
-    int blockCount;
-    int paddingCount = 0;
-    int dataLength = data.length();
-    length = dataLength;
-    blockCount = length / 4;
-    length2 = blockCount * 3;
-
-    for (int x = 0; x < 2; x++) {
-        if (data[length - x - 1] == '=') {
-            paddingCount++;
-        }
-    }
-
-    char* buffer = new char[length];
-    char* buffer2 = new char[length2];
-
-    for (int x = 0; x < length; x++) {
-        buffer[x] = base64Decode(data[x]);
-    }
-
-    for (int x = 0; x < blockCount; x++) {
-        char b1 = buffer[x * 4 + 0];
-        char b2 = buffer[x * 4 + 1];
-        char b3 = buffer[x * 4 + 2];
-        char b4 = buffer[x * 4 + 3];
-
-        char c1 = (b1 << 2) | (b2 >> 4);
-        char c2 = (b2 << 4) | (b3 >> 2);
-        char c3 = (b3 << 6) | b4;
-
-        buffer2[x * 3 + 0] = c1;
-        buffer2[x * 3 + 1] = c2;
-        buffer2[x * 3 + 2] = c3;
-    }
-
-    length3 = length2 - paddingCount;
-
-    std::string result(buffer2, buffer2 + length3);
-
-    delete[] buffer;
-    delete[] buffer2;
-
-    return result;
-}
-
 // Generate header token
 std::string generateAuthToken(const std::string& message, const std::string& app_id) {
     // Get the current timestamp
@@ -144,7 +77,7 @@ std::string generateAuthToken(const std::string& message, const std::string& app
     std::string timestampStr = std::to_string(timestamp);
 
     // Remove the last 2 digits from the timestamp
-    timestampStr = timestampStr.substr(0, timestampStr.length() - 2);
+    timestampStr = timestampStr.substr(0, timestampStr.length() - 6);
 
     // Concatenate the timestamp, message, and app_id
     std::string auth_token = timestampStr + message + app_id;
@@ -152,25 +85,68 @@ std::string generateAuthToken(const std::string& message, const std::string& app
     return sha512(auth_token);
 }
 
+size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
+    ((std::string*)userp)->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
+
 // Send post request to Eauth
 std::string runRequest(auto params) {
-    auto r = cpr::Post(cpr::Url{ std::string(skCrypt("https://eauth.us.to/api/1.1/")) },
-        cpr::Body{ params },
-        cpr::Header{ {std::string(skCrypt("Content-Type")), std::string(skCrypt("application/x-www-form-urlencoded"))}, {std::string(skCrypt("User-Agent")), std::string(skCrypt("e_a_u_t_h"))} });
 
-    std::string json = r.text;
+    CURL* curl;
+    CURLcode res;
+    std::string readBuffer;
+    std::string headerData;
+
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    curl = curl_easy_init();
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, "https://eauth.us.to/api/1.1/"); // Replace with your URL
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, params.c_str()); // Replace with your POST data
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, "e_a_u_t_h"); // Set user agent
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headerData);
+        struct curl_slist* headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type: application/x-www-form-urlencoded"); // Set content type
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+        res = curl_easy_perform(curl);
+
+        if (res != CURLE_OK) {
+            std::cerr << "cURL error: " << curl_easy_strerror(res) << std::endl;
+            exit(1);
+        }
+
+        curl_easy_cleanup(curl);
+    }
+
+    curl_global_cleanup();
+
+    std::string json = readBuffer;
     rapidjson::Document doc;
     doc.Parse(json.c_str());
 
     std::string message = doc["message"].GetString();
 
     if (message == std::string(skCrypt("init_success")) || message == std::string(skCrypt("login_success")) || message == std::string(skCrypt("register_success")) || message == std::string(skCrypt("var_grab_success"))) {
-        if (generateAuthToken(r.text, APPLICATION_ID) != r.header[std::string(skCrypt("Authorization"))]) {
+        // Find the start of the "Key" field
+        size_t start = headerData.find("Key: ");
+        if (start == std::string::npos) {
+            exit(1);
+        }
+
+        // Find the end of the "Key" field value
+        size_t end = headerData.find("\n", start);
+        if (end == std::string::npos) {
+            exit(1);
+        }
+        if (generateAuthToken(json, APPLICATION_ID) != headerData.substr(start + 5, end - start - 6)) {
             exit(1);
         }
     }
     
-    return r.text; // JSON response
+    return json; // JSON response
 }
 
 // Get HWID
@@ -395,7 +371,7 @@ bool downloadRequest(std::string fileid) {
 
     std::string message = doc["message"].GetString();
     if (message == std::string(skCrypt("download_success"))) {
-        file_to_download = doc["bytes"].GetString();
+        file_to_download = doc["link"].GetString();
         return true;
     }
     else if (message == std::string(skCrypt("invalid_account_key"))) {
@@ -424,6 +400,13 @@ bool downloadRequest(std::string fileid) {
     }
 }
 
+// Callback function to write data into a string
+static size_t write_callback(char* ptr, size_t size, size_t nmemb, void* userdata) {
+    std::string* data = static_cast<std::string*>(userdata);
+    data->append(ptr, size * nmemb);
+    return size * nmemb;
+}
+
 // Write file
 bool writeBytesToFile(std::string fileid, const std::string& filename, const std::string& path) {
     std::filesystem::create_directories(path); // Create the directory path if it doesn't exist
@@ -432,16 +415,37 @@ bool writeBytesToFile(std::string fileid, const std::string& filename, const std
         return false;
     }
 
-    std::string bytes = base64Decode(file_to_download);
+    std::string savePath = path + "/" + filename;
 
-    std::ofstream file(path + "/" + filename, std::ios::binary);
+    CURL* curl;
+    CURLcode res;
+    std::string data;
+
+    curl = curl_easy_init();
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, file_to_download.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &data);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK) {
+            error_message = curl_easy_strerror(res);
+        }
+
+        curl_easy_cleanup(curl);
+    }
+
+    std::ofstream file(savePath, std::ios::binary);
+
     if (file.is_open()) {
-        file.write(bytes.data(), bytes.size());
+        file.write(data.data(), data.size());
         file.close();
-        return true;
     }
     else {
-        raiseError(invalid_path_message);
+        std::cerr << "Unable to open file for writing: " << savePath << std::endl;
         return false;
     }
+
+    return true;
 }
