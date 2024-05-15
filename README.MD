@@ -21,14 +21,12 @@ https://github.com/Eauth786/Eauth-CPP-Console
 Installation
 -------------
 
-You can download and install cpr, and OpenSSL using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
+You can download and install cURL, and OpenSSL using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
 ```Bash
 git clone https://github.com/Microsoft/vcpkg.git
 cd vcpkg
 bootstrap-vcpkg.sh
-vcpkg install cpr:x86-windows
-vcpkg install cpr:x64-windows
-vcpkg install openssl:x86-windows
-vcpkg install openssl:x64-windows
+vcpkg install curl
+vcpkg install openssl
 vcpkg integrate install
 ```
