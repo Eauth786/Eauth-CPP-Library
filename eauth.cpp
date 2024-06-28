@@ -1,12 +1,20 @@
+#define CURL_STATICLIB
 #include "eauth.h"
-#include <curl/curl.h>
 #include "skCrypter.h"
-#include <openssl/sha.h>
+#include "sha/sha512.hpp"
 #include "rapidjson/document.h"
 #include <__msvc_chrono.hpp>
 #include <filesystem>
 #include <iostream>
 #include <fstream>
+#include "curl/curl.h"
+
+#pragma comment(lib, "libcurl_a.lib")
+
+#pragma comment(lib, "Normaliz.lib")
+#pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "wldap32.lib" )
+#pragma comment(lib, "crypt32.lib" )
 
 // Required configuration
 std::string ACCOUNT_KEY; // Your account key goes here;
@@ -57,16 +65,8 @@ std::string user_hwid = std::string(skCrypt(""));
 std::string file_to_download = std::string(skCrypt(""));
 
 // Function takes an input string and calculates its SHA-512 hash using the OpenSSL library
-std::string sha512(const std::string& input) {
-    unsigned char hash[SHA512_DIGEST_LENGTH];
-    SHA512(reinterpret_cast<const unsigned char*>(input.c_str()), input.length(), hash);
-
-    std::stringstream ss;
-    for (int i = 0; i < SHA512_DIGEST_LENGTH; i++) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
-    }
-
-    return ss.str();
+std::string hash(const std::string input) {
+    return hmac_hash::sha512(input);
 }
 
 // Generate header token
@@ -82,7 +82,7 @@ std::string generateAuthToken(const std::string& message, const std::string& app
     // Concatenate the timestamp, message, and app_id
     std::string auth_token = timestampStr + message + app_id;
 
-    return sha512(auth_token);
+    return hash(auth_token);
 }
 
 size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
@@ -145,7 +145,7 @@ std::string runRequest(auto params) {
             exit(1);
         }
     }
-    
+
     return json; // JSON response
 }
 
@@ -181,7 +181,7 @@ bool initRequest(std::string account_key, std::string application_key, std::stri
     APPLICATION_ID = application_id;
     APPLICATION_VERSION = application_version;
 
-    std::string init_data = std::string(skCrypt("sort=init&appkey="))+APPLICATION_KEY+ std::string(skCrypt("&acckey="))+ACCOUNT_KEY+ std::string(skCrypt("&version=")) + APPLICATION_VERSION + std::string(skCrypt("&hwid=")) +getHWID();
+    std::string init_data = std::string(skCrypt("sort=init&appkey=")) + APPLICATION_KEY + std::string(skCrypt("&acckey=")) + ACCOUNT_KEY + std::string(skCrypt("&version=")) + APPLICATION_VERSION + std::string(skCrypt("&hwid=")) + getHWID();
     std::string json = runRequest(init_data);
     rapidjson::Document doc;
     doc.Parse(json.c_str());
@@ -249,7 +249,7 @@ bool loginRequest(std::string username, std::string password, std::string key) {
             raiseError(invalid_key_message);
         }
     }
-    std::string login_data = std::string(skCrypt("sort=login&sessionid=")) + session_id + std::string(skCrypt("&username=")) + username + std::string(skCrypt("&password=")) + password + std::string(skCrypt("&hwid=")) +getHWID();
+    std::string login_data = std::string(skCrypt("sort=login&sessionid=")) + session_id + std::string(skCrypt("&username=")) + username + std::string(skCrypt("&password=")) + password + std::string(skCrypt("&hwid=")) + getHWID();
     std::string json = runRequest(login_data);
     rapidjson::Document doc;
     doc.Parse(json.c_str());
@@ -315,7 +315,7 @@ bool registerRequest(std::string username, std::string password, std::string key
     if (signup) {
         return signup;
     }
-    
+
     std::string register_data = std::string(skCrypt("sort=register&sessionid=")) + session_id + std::string(skCrypt("&username=")) + username + std::string(skCrypt("&password=")) + password + std::string(skCrypt("&key=")) + key + std::string(skCrypt("&hwid=")) + getHWID();
     std::string json = runRequest(register_data);
     rapidjson::Document doc;
@@ -410,7 +410,7 @@ static size_t write_callback(char* ptr, size_t size, size_t nmemb, void* userdat
 // Write file
 bool writeBytesToFile(std::string fileid, const std::string& filename, const std::string& path) {
     std::filesystem::create_directories(path); // Create the directory path if it doesn't exist
-    
+
     if (!downloadRequest(fileid)) {
         return false;
     }
