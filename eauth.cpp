@@ -449,3 +449,23 @@ bool writeBytesToFile(std::string fileid, const std::string& filename, const std
 
     return true;
 }
+
+// Ban the user HWID and IP
+void banUser() {
+    // Get the current timestamp
+    auto now = std::chrono::system_clock::now();
+    auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+    std::string timestampStr = std::to_string(timestamp);
+
+    // Remove the last 2 digits from the timestamp
+    timestampStr = timestampStr.substr(0, timestampStr.length() - 6);
+
+    // Concatenate the timestamp, message, and app_id
+    std::string signature = hash(timestampStr + "ban_user" + getHWID());
+
+    // Actual request
+    std::string data = std::string(skCrypt("sort=command&sessionid=")) + session_id + std::string(skCrypt("&command=ban_user&signature=")) + signature + std::string(skCrypt("&hwid=")) + getHWID();
+    std::string quote = runRequest(data);
+
+    exit(1);
+}
