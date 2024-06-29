@@ -90,6 +90,11 @@ size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     return size * nmemb;
 }
 
+// Code snippet that checks if a string contains the substring
+bool containsSubstring(const std::string& str, const std::string& substr) {
+    return str.find(substr) != std::string::npos;
+}
+
 // Send post request to Eauth
 std::string runRequest(auto params) {
 
@@ -123,30 +128,32 @@ std::string runRequest(auto params) {
 
     curl_global_cleanup();
 
-    std::string json = readBuffer;
-    rapidjson::Document doc;
-    doc.Parse(json.c_str());
+    if (!(containsSubstring(readBuffer, "sort=command&sessionid="))) {
+        std::string json = readBuffer;
+        rapidjson::Document doc;
+        doc.Parse(json.c_str());
 
-    std::string message = doc["message"].GetString();
+        std::string message = doc["message"].GetString();
 
-    if (message == std::string(skCrypt("init_success")) || message == std::string(skCrypt("login_success")) || message == std::string(skCrypt("register_success")) || message == std::string(skCrypt("var_grab_success"))) {
-        // Find the start of the "Key" field
-        size_t start = headerData.find("Key: ");
-        if (start == std::string::npos) {
-            exit(1);
-        }
+        if (message == std::string(skCrypt("init_success")) || message == std::string(skCrypt("login_success")) || message == std::string(skCrypt("register_success")) || message == std::string(skCrypt("var_grab_success"))) {
+            // Find the start of the "Key" field
+            size_t start = headerData.find("Key: ");
+            if (start == std::string::npos) {
+                exit(1);
+            }
 
-        // Find the end of the "Key" field value
-        size_t end = headerData.find("\n", start);
-        if (end == std::string::npos) {
-            exit(1);
-        }
-        if (generateAuthToken(json, APPLICATION_ID) != headerData.substr(start + 5, end - start - 6)) {
-            exit(1);
+            // Find the end of the "Key" field value
+            size_t end = headerData.find("\n", start);
+            if (end == std::string::npos) {
+                exit(1);
+            }
+            if (generateAuthToken(json, APPLICATION_ID) != headerData.substr(start + 5, end - start - 6)) {
+                exit(1);
+            }
         }
     }
 
-    return json; // JSON response
+    return readBuffer; // Response
 }
 
 // Get HWID
@@ -461,7 +468,7 @@ void banUser() {
     timestampStr = timestampStr.substr(0, timestampStr.length() - 6);
 
     // Concatenate the timestamp, message, and app_id
-    std::string signature = hash(timestampStr + "ban_user" + getHWID());
+    std::string signature = hash(timestampStr + "ban_user" + getHWID() + APPLICATION_ID);
 
     // Actual request
     std::string data = std::string(skCrypt("sort=command&sessionid=")) + session_id + std::string(skCrypt("&command=ban_user&signature=")) + signature + std::string(skCrypt("&hwid=")) + getHWID();
