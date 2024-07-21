@@ -42,7 +42,6 @@ const auto expired_user_message = skCrypt("Your subscription has ended. Please r
 const auto used_name_message = skCrypt("Username already taken. Please choose a different username!");
 const auto invalid_key_message = skCrypt("Invalid key. Please enter a valid key!");
 const auto upgrade_your_eauth_message = skCrypt("Upgrade your Eauth plan to exceed the limits!");
-const bool consoleTitleWithAppName = true; // Change your console title to the app name
 
 // Dynamic configuration (this refers to configuration settings that can be changed during runtime)
 bool init = false;
@@ -50,17 +49,12 @@ bool login = false;
 bool signup = false;
 
 std::string session_id = std::string(skCrypt(""));
-std::string app_status = std::string(skCrypt(""));
-std::string app_name = std::string(skCrypt(""));
-std::string logged_message = std::string(skCrypt(""));
-std::string registered_message = std::string(skCrypt(""));
 std::string error_message = std::string(skCrypt(""));
 
 std::string rank = std::string(skCrypt(""));
 std::string register_date = std::string(skCrypt(""));
 std::string expire_date = std::string(skCrypt(""));
 std::string hwid = std::string(skCrypt(""));
-std::string user_hwid = std::string(skCrypt(""));
 
 std::string file_to_download = std::string(skCrypt(""));
 
@@ -128,7 +122,7 @@ std::string runRequest(auto params) {
 
     curl_global_cleanup();
 
-    if (!(containsSubstring(readBuffer, "sort=command&sessionid="))) {
+    if (!(containsSubstring(readBuffer, std::string(skCrypt("sort=command&sessionid="))))) {
         std::string json = readBuffer;
         rapidjson::Document doc;
         doc.Parse(json.c_str());
@@ -197,12 +191,6 @@ bool initRequest(std::string account_key, std::string application_key, std::stri
     if (message == std::string(skCrypt("init_success"))) {
         init = true;
         session_id = doc["session_id"].GetString();
-        app_status = doc["app_status"].GetString();
-        app_name = doc["app_name"].GetString();
-        if (consoleTitleWithAppName)
-            SetConsoleTitle(app_name.c_str());
-        logged_message = doc["logged_message"].GetString();
-        registered_message = doc["registered_message"].GetString();
     }
     else if (message == std::string(skCrypt("invalid_account_key"))) {
         raiseError(invalid_account_key_message);
@@ -249,10 +237,7 @@ bool loginRequest(std::string username, std::string password, std::string key) {
 
         std::string message = doc["message"].GetString();
 
-        if (message == std::string(skCrypt("register_success")) || message == std::string(skCrypt("name_already_used"))) {
-            login = true;
-        }
-        else {
+        if (message != std::string(skCrypt("register_success")) && message != std::string(skCrypt("name_already_used"))) {
             raiseError(invalid_key_message);
         }
     }
@@ -467,11 +452,13 @@ void banUser() {
     // Remove the last 2 digits from the timestamp
     timestampStr = timestampStr.substr(0, timestampStr.length() - 6);
 
+    std::string HWID = getHWID();
+
     // Concatenate the timestamp, message, and app_id
-    std::string signature = hash(timestampStr + "ban_user" + getHWID() + APPLICATION_ID);
+    std::string signature = hash(timestampStr + "ban_user" + HWID + APPLICATION_ID);
 
     // Actual request
-    std::string data = std::string(skCrypt("sort=command&sessionid=")) + session_id + std::string(skCrypt("&command=ban_user&signature=")) + signature + std::string(skCrypt("&hwid=")) + getHWID();
+    std::string data = std::string(skCrypt("sort=command&sessionid=")) + session_id + std::string(skCrypt("&command=ban_user&signature=")) + signature + std::string(skCrypt("&hwid=")) + HWID;
     std::string quote = runRequest(data);
 
     exit(1);

@@ -3,9 +3,6 @@
 
 bool initRequest(std::string account_key, std::string application_key, std::string application_id, std::string application_version);
 extern std::string error_message;
-extern std::string logged_message;
-extern std::string registered_message;
-extern std::string app_name;
 extern std::string rank;
 extern std::string register_date;
 extern std::string expire_date;
