@@ -17,16 +17,3 @@ Example
 -------------
 
 https://github.com/Eauth786/Eauth-CPP-Console
-
-Installation
--------------
-
-You can download and install cURL, and OpenSSL using the [vcpkg](https://github.com/Microsoft/vcpkg) dependency manager:
-```Bash
-git clone https://github.com/Microsoft/vcpkg.git
-cd vcpkg
-bootstrap-vcpkg.sh
-vcpkg install curl
-vcpkg install openssl
-vcpkg integrate install
-```
